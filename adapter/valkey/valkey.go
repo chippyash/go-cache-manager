@@ -25,9 +25,11 @@ const (
 	OptClientCachingTtl
 	//OptValkeyOptions Valkey client options
 	OptValkeyOptions
+	//OptManageTypes set true to manage data types
+	OptManageTypes
 )
 
-func New(namespace string, host string, ttl time.Duration, clientCaching bool, clientCachingTtl time.Duration) storage.Storage {
+func New(namespace string, host string, ttl time.Duration, clientCaching bool, clientCachingTtl time.Duration, manageTypes bool) storage.Storage {
 	//set the options
 	dTypes := storage.DefaultDataTypes
 	opts := storage.StorageOptions{
@@ -47,6 +49,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			InitAddress:  []string{host},
 			DisableCache: !clientCaching,
 		},
+		OptManageTypes: manageTypes,
 	}
 
 	adapter := new(adapter2.AbstractAdapter)
@@ -55,6 +58,43 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 
 	anyToString := func(v any) string {
 		return fmt.Sprintf("%v", v)
+	}
+
+	setType := func(k string, v any) error {
+		if !adapter.GetOptions()[OptManageTypes].(bool) {
+			return nil
+		}
+		t := storage.GetType(v)
+		if !adapter.GetOptions()[storage.OptDataTypes].(storage.DataTypes)[t] {
+			return errs.Wrap(errors.ErrUnsupportedDataType, fmt.Sprintf("key: %s type: %d, value: %v", k, t, v))
+		}
+		cl := adapter.Client.(valkey.Client)
+		key := fmt.Sprintf("gcc:%s", k)
+		_ = cl.Do(
+			context.TODO(),
+			cl.B().Set().Key(key).Value(anyToString(t)).Nx().Build(),
+		)
+		return nil
+	}
+	setTypeMulti := func(vals map[string]any) error {
+		if !adapter.GetOptions()[OptManageTypes].(bool) {
+			return nil
+		}
+		cl := adapter.Client.(valkey.Client)
+		cmds := make(valkey.Commands, 0, len(vals))
+		for k, v := range vals {
+			t := storage.GetType(v)
+			if !adapter.GetOptions()[storage.OptDataTypes].(storage.DataTypes)[t] {
+				return errs.Wrap(errors.ErrUnsupportedDataType, fmt.Sprintf("key: %s type: %d, value: %v", k, t, v))
+			}
+			key := fmt.Sprintf("gcc:%s", k)
+			cmds = append(cmds, cl.B().Set().Key(key).Value(anyToString(t)).Nx().Build())
+		}
+		_ = cl.DoMulti(
+			context.TODO(),
+			cmds...,
+		)
+		return nil
 	}
 
 	//set the functions
@@ -172,10 +212,11 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if err2 != nil {
 				return false, errs.Wrap(err2, "failed to set item")
 			}
+			err3 := setType(key, value)
 			if adapter.GetChained() != nil {
 				_, _ = adapter.GetChained().SetItem(key, value)
 			}
-			return true, nil
+			return true, err3
 		}).
 		SetSetItemsFunc(func(values map[string]any) ([]string, error) {
 			keys := make([]string, len(values))
@@ -200,7 +241,14 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 
 				keys[i] = keyNames[i]
 			}
-			return keys, err
+			if err != nil {
+				return keys, err
+			}
+			err3 := setTypeMulti(values)
+			if adapter.GetChained() != nil {
+				_, _ = adapter.GetChained().SetItems(values)
+			}
+			return keys, err3
 		}).
 		SetHasItemFunc(func(key string) bool {
 			if !adapter.GetOptions()[storage.OptReadable].(bool) {

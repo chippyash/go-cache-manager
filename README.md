@@ -34,6 +34,22 @@ cacheManager := memory.New(ns, ttl, purgeTtl)
 
 The underlying client for the Memory Cache is [github.com/patrickmn/go-cache](github.com/patrickmn/go-cache)
 
+Using the setter methods for the Memory cache adapter allows you pass any type of value. The value will be stored as-is
+in memory and returned via any of the getter methods as type interface{} (any). You are responsible for casting it to your 
+required type;
+
+```go
+cacheManager := memory.New(ns, ttl, purgeTtl)
+ok, err := cacheManager.SetItem("key", someValue)
+if !ok || err != nil {
+	panic(errors.Wrap(err, "could not set value for key"))
+}
+v, err := cacheManager.GetItem("key")
+if err != nil {
+	panic(err)
+}
+someValue := v.(uint64)
+```
 ### Valkey (Redis) Cache
 
 ```go
@@ -42,13 +58,39 @@ host := "127.0.0.1"
 ttl := time.Minute * 5 //Expiry Ttl
 clientCaching := true //we want to use client side caching
 clientCachingTtl = time.Minute * 4 //set this to less than the ttl
-cacheManager, err := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl).Open()
+cacheManager, err := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl, false).Open()
 if err != nil {
 	panic(err)
 }
 ```
 
 The underlying client for the Valkey Cache is [github.com/valkey-io/valkey-go](github.com/valkey-io/valkey-go)
+
+Using the setter methods for the Valkey cache adapter allows you pass any type of value. The value will be stored as a
+string in the cache server and returned via any of the getter methods as type **interface{}|string**. You are responsible for casting it 
+to your required type.
+
+```go
+cacheManager := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl, false).Open()
+ok, err := cacheManager.SetItem("key", someValue)
+if !ok || err != nil {
+	panic(errors.Wrap(err, "could not set value for key"))
+}
+v, err := cacheManager.GetItem("key")
+if err != nil {
+	panic(err)
+}
+someValue, err := strconv.ParseUint(v.(string), 10, 64)
+if err != nil {
+    panic(err)
+}
+//note that for other types, you may need a second cast
+u64, err := strconv.ParseUint(v.(string), 10, 32)
+if err != nil {
+    panic(err)
+}
+someValue = uint32(u64)
+```
 
 ### Namespaces
 Each adapter allows you to declare a namespace. This is simply prefixed to any key value that you use. Thus, you can create multiple
@@ -59,7 +101,7 @@ The library supports chaining adapters together.
 
 ```go
 cacheManager := memory.New(ns, ttl, purgeTtl)
-chainedAdapter, err := := valkey.New(ns, host, ttl, false, time.Second * 0).Open()
+chainedAdapter, err := := valkey.New(ns, host, ttl, false, time.Second * 0, false).Open()
 cacheManager.(storage.Chainable).ChainAdapter(chainedAdapter)
 ```
 
@@ -79,7 +121,7 @@ Similarly, although no functionality currently exists in the Close method for th
 the habit of deferring a call to it.
 
 ```go
-adapter, err := valkey.New(ns, host, ttl, false, time.Second * 0).Open()
+adapter, err := valkey.New(ns, host, ttl, false, time.Second * 0, false).Open()
 if err != nil {
 	panic(err)
 }
@@ -98,7 +140,7 @@ by calling `adapter.SetOptions(opts)`. opts is a storage.StorageOptions object. 
 set of options, but may have additional options specific to the adapter.
 
 ```go
-cache := valkey.New(ns, host, ttl, false, time.Second * 0)
+cache := valkey.New(ns, host, ttl, false, time.Second * 0, false)
 opts := cache.GetOptions()
 //do something with the options
 // ...
@@ -137,7 +179,7 @@ client := cacheManager.Client.(*cache.Cache)
 import vk "github.com/chippyash/go-cache-manager/adapter/valkey"
 import "github.com/valkey-io/valkey-go"
 
-cacheManager, err := vk.New(ns, host, ttl, clientCaching, clientCachingTtl).Open()
+cacheManager, err := vk.New(ns, host, ttl, clientCaching, clientCachingTtl, false).Open()
 client := cacheManager.Client.(valkey.Client)
 ```
 

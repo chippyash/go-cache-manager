@@ -2,10 +2,10 @@ package valkey_test
 
 import (
 	"github.com/alicebob/miniredis/v2"
-	"github.com/stretchr/testify/assert"
 	"github.com/chippyash/go-cache-manager/adapter/valkey"
 	"github.com/chippyash/go-cache-manager/errors"
 	"github.com/chippyash/go-cache-manager/storage"
+	"github.com/stretchr/testify/assert"
 	"slices"
 	"testing"
 	"time"
@@ -15,7 +15,7 @@ import (
 
 func TestValkeyAdapter_GetAndSetItem(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	ok, err := sut.SetItem("key", "value")
@@ -29,7 +29,7 @@ func TestValkeyAdapter_GetAndSetItem(t *testing.T) {
 
 func TestValkeyAdapter_GetUnknownItem(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	val, err := sut.GetItem("key")
@@ -40,7 +40,7 @@ func TestValkeyAdapter_GetUnknownItem(t *testing.T) {
 
 func TestValkeyAdapter_GetAndSetMultipleItems(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	vals := map[string]any{
@@ -65,7 +65,7 @@ func TestValkeyAdapter_GetAndSetMultipleItems(t *testing.T) {
 
 func TestValkeyAdapter_HasItem(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	ok, err := sut.SetItem("foo", "bar")
@@ -78,7 +78,7 @@ func TestValkeyAdapter_HasItem(t *testing.T) {
 
 func TestValkeyAdapter_HasMultipleItems(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	vals := map[string]any{
@@ -100,7 +100,7 @@ func TestValkeyAdapter_HasMultipleItems(t *testing.T) {
 func TestValkeyAdapter_Chaining(t *testing.T) {
 	rs := miniRedis(t)
 	rs2 := miniredis.RunT(t)
-	chainedAdapter := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	chainedAdapter := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	chainedAdapter, err := chainedAdapter.Open()
 	assert.NoError(t, err)
 	vals := map[string]any{
@@ -111,7 +111,7 @@ func TestValkeyAdapter_Chaining(t *testing.T) {
 	_, err = chainedAdapter.SetItems(vals)
 	assert.NoError(t, err)
 
-	sut := valkey.New("two:", rs2.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("two:", rs2.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err = sut.Open()
 	assert.NoError(t, err)
 	sut.(storage.Chainable).ChainAdapter(chainedAdapter)
@@ -132,7 +132,7 @@ func TestValkeyAdapter_Chaining(t *testing.T) {
 
 func TestValkeyAdapter_CheckAndSetItem(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	ok, err := sut.SetItem("foo", "bar")
@@ -154,7 +154,7 @@ func TestValkeyAdapter_CheckAndSetItem(t *testing.T) {
 
 func TestValkeyAdapter_CheckAndSetMultipleItems(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	ok, err := sut.SetItem("foo", "bar")
@@ -173,7 +173,7 @@ func TestValkeyAdapter_CheckAndSetMultipleItems(t *testing.T) {
 
 func TestValkeyAdapter_TouchItem(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	ok, err := sut.SetItem("foo", "bar")
@@ -186,7 +186,7 @@ func TestValkeyAdapter_TouchItem(t *testing.T) {
 
 func TestValkeyAdapter_TouchMultipleItems(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	_, err = sut.SetItems(map[string]any{
@@ -203,7 +203,7 @@ func TestValkeyAdapter_TouchMultipleItems(t *testing.T) {
 
 func TestValkeyAdapter_RemoveItem(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	_, err = sut.SetItems(map[string]any{
@@ -225,7 +225,7 @@ func TestValkeyAdapter_RemoveItem(t *testing.T) {
 
 func TestValkeyAdapter_RemoveMultipleItems(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	_, err = sut.SetItems(map[string]any{
@@ -241,7 +241,7 @@ func TestValkeyAdapter_RemoveMultipleItems(t *testing.T) {
 
 func TestValkeyAdapter_IncrementValidNumber(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	keys := map[string]any{
@@ -270,7 +270,7 @@ func TestValkeyAdapter_IncrementValidNumber(t *testing.T) {
 
 func TestValkeyAdapter_IncrementInvalidNumber(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	_, err = sut.SetItem("foo", "bar")
@@ -283,7 +283,7 @@ func TestValkeyAdapter_IncrementInvalidNumber(t *testing.T) {
 
 func TestValkeyAdapter_DecrementValidNumber(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	keys := map[string]any{
@@ -312,7 +312,7 @@ func TestValkeyAdapter_DecrementValidNumber(t *testing.T) {
 
 func TestValkeyAdapter_DecrementInvalidNumber(t *testing.T) {
 	rs := miniRedis(t)
-	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	_, err = sut.SetItem("foo", "bar")
