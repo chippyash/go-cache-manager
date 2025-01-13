@@ -1,12 +1,14 @@
 package valkey_test
 
 import (
+	"fmt"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/chippyash/go-cache-manager/adapter/valkey"
 	"github.com/chippyash/go-cache-manager/errors"
 	"github.com/chippyash/go-cache-manager/storage"
 	"github.com/stretchr/testify/assert"
 	"slices"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -25,6 +27,28 @@ func TestValkeyAdapter_GetAndSetItem(t *testing.T) {
 	val, err := sut.GetItem("key")
 	assert.NoError(t, err)
 	assert.Equal(t, "value", val)
+}
+
+func TestValkeyAdapter_GetAndSetItemManaged(t *testing.T) {
+	rs := miniRedis(t)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, true)
+	sut, err := sut.Open()
+	assert.NoError(t, err)
+	ok, err := sut.SetItem("key", "value")
+	assert.True(t, ok)
+	assert.NoError(t, err)
+
+	//check that we have a data management entry in cache
+	typ, err := rs.Get("gcm:key")
+	assert.NoError(t, err)
+	i64, err := strconv.ParseInt(typ, 10, 64)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(storage.TypeString), i64)
+
+	val, err := sut.GetItem("key")
+	assert.NoError(t, err)
+	assert.Equal(t, "value", val)
+	assert.Equal(t, fmt.Sprintf("%T", val), "string")
 }
 
 func TestValkeyAdapter_GetUnknownItem(t *testing.T) {
@@ -61,6 +85,42 @@ func TestValkeyAdapter_GetAndSetMultipleItems(t *testing.T) {
 		"key3": "true",
 	}
 	assert.Equal(t, retVals, ret)
+}
+
+func TestValkeyAdapter_GetAndSetMultipleItemsManaged(t *testing.T) {
+	rs := miniRedis(t)
+	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, true)
+	sut, err := sut.Open()
+	assert.NoError(t, err)
+	vals := map[string]any{
+		"key1": "value1",
+		"key2": 2,
+		"key3": true,
+	}
+	keys, err := sut.SetItems(vals)
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"key1", "key2", "key3"}, keys)
+
+	//check that we have a data management entries in cache
+	typ, err := rs.Get("gcm:key1")
+	assert.NoError(t, err)
+	i64, err := strconv.ParseInt(typ, 10, 64)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(storage.TypeString), i64)
+	typ, err = rs.Get("gcm:key2")
+	assert.NoError(t, err)
+	i64, err = strconv.ParseInt(typ, 10, 64)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(storage.TypeInteger), i64)
+	typ, err = rs.Get("gcm:key3")
+	assert.NoError(t, err)
+	i64, err = strconv.ParseInt(typ, 10, 64)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(storage.TypeBoolean), i64)
+
+	ret, err := sut.GetItems(keys)
+	assert.NoError(t, err)
+	assert.Equal(t, vals, ret)
 }
 
 func TestValkeyAdapter_HasItem(t *testing.T) {
@@ -110,6 +170,11 @@ func TestValkeyAdapter_Chaining(t *testing.T) {
 	}
 	_, err = chainedAdapter.SetItems(vals)
 	assert.NoError(t, err)
+	//check that chained server has the keys
+	chainKeys := rs.Keys()
+	assert.True(t, slices.Contains(chainKeys, "one:key1"))
+	assert.True(t, slices.Contains(chainKeys, "one:key2"))
+	assert.True(t, slices.Contains(chainKeys, "one:key3"))
 
 	sut := valkey.New("two:", rs2.Addr(), time.Second*60, false, time.Second*0, false)
 	sut, err = sut.Open()
@@ -245,19 +310,19 @@ func TestValkeyAdapter_IncrementValidNumber(t *testing.T) {
 	sut, err := sut.Open()
 	assert.NoError(t, err)
 	keys := map[string]any{
-		//"int":     100,
-		//"int8":    int8(100),
-		//"int16":   int16(100),
-		"int32": int32(100),
-		//"int64":   int64(100),
-		//"uint":    uint(100),
-		//"uint8":   uint8(100),
-		//"uint16":  uint16(100),
-		//"uint32":  uint32(100),
-		//"uint64":  uint64(100),
-		//"uintptr": uintptr(100),
-		//"float32": float32(100),
-		//"float64": float64(100),
+		"int":     100,
+		"int8":    int8(100),
+		"int16":   int16(100),
+		"int32":   int32(100),
+		"int64":   int64(100),
+		"uint":    uint(100),
+		"uint8":   uint8(100),
+		"uint16":  uint16(100),
+		"uint32":  uint32(100),
+		"uint64":  uint64(100),
+		"uintptr": uintptr(100),
+		"float32": float32(100),
+		"float64": float64(100),
 	}
 	_, err = sut.SetItems(keys)
 	assert.NoError(t, err)

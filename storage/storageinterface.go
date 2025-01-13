@@ -1,65 +1,5 @@
 package storage
 
-import "time"
-
-const (
-	TypeUnknown = iota
-	TypeBoolean
-	TypeInteger
-	TypeInteger8
-	TypeInteger16
-	TypeInteger32
-	TypeInteger64
-	TypeUint
-	TypeUint8
-	TypeUint16
-	TypeUint32
-	TypeUint64
-	TypeFloat32
-	TypeFloat64
-	TypeString
-	TypeDuration
-	TypeTime
-	TypeBytes
-)
-
-func GetType(v any) int {
-	switch v.(type) {
-	case string:
-		return TypeString
-	case int:
-		return TypeInteger
-	case int8:
-		return TypeInteger8
-	case int16:
-		return TypeInteger16
-	case int32:
-		return TypeInteger32
-	case int64:
-		return TypeInteger64
-	case uint:
-		return TypeUint
-	case uint8:
-		return TypeUint8
-	case uint16:
-		return TypeUint16
-	case uint32:
-		return TypeUint32
-	case uint64: return TypeUint64
-	case float32:
-		return TypeFloat32
-	case float64:
-		return TypeFloat64
-	case time.Duration:	return TypeDuration
-	case time.Time:	return TypeTime
-	case bool:
-		return TypeBoolean
-	case []byte:
-		return TypeBytes
-	default:
-		return TypeUnknown
-	}
-}
 
 const (
 	OptNamespace = iota
@@ -73,7 +13,6 @@ const (
 )
 
 type StorageOptions map[int]any
-type DataTypes map[int]bool
 
 type Storage interface {
 	//SetOptions sets the storage options
@@ -114,23 +53,3 @@ type Storage interface {
 	Close() error
 }
 
-var DefaultDataTypes = DataTypes{
-	TypeUnknown: true,
-	TypeBoolean: true,
-	TypeInteger: true,
-	TypeInteger8: true,
-	TypeInteger16: true,
-	TypeInteger32: true,
-	TypeInteger64: true,
-	TypeUint: true,
-	TypeUint8: true,
-	TypeUint16: true,
-	TypeUint32: true,
-	TypeUint64: true,
-	TypeFloat32: true,
-	TypeFloat64: true,
-	TypeString: true,
-	TypeDuration: true,
-	TypeTime: true,
-	TypeBytes: true,
-}
