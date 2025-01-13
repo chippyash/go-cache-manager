@@ -6,7 +6,17 @@
 Provides a simplified interface to key/value cache management utilising adaptors to provide the same functionality for
 different cache databases.
 
-Go V1.23.4+
+Based around some ideas that come from my PHP days and particularly the Zend Framework (now Laminas) that had a fully 
+functional simple cache manager. See https://docs.laminas.dev/laminas-cache/
+
+This will never try to be a friend to all. For straightforward caching operations, it should work.
+
+### Design considerations
+
+ - Given the Go language, be as simple as possible
+ - Deal with straight forward key/value caching
+ - Make each cache backend look the same, so they can be swapped in and out
+ - Allow devs to use the native client if they need to 
 
 ### Current backends
 
@@ -14,6 +24,11 @@ Go V1.23.4+
  - Valkey/Redis
 
 ## How
+
+Go V1.23.4+
+
+Please consider any version at < 1 as pre production. Use at your own risk. But please do try it out. The more feedback 
+I get, the better it will be.
 
 ## For Production
 
@@ -184,6 +199,19 @@ client := cacheManager.Client.(valkey.Client)
 ```
 
 ## For Development
+
+If you want to add another adapter, you should carefully study the two so far provided.  Write your code, including the unit
+tests, which as a simple base should mimic what are already done, plus any required by your specific adapter.
+
+This lib is peculiar in that it follows a well trodden path of using an Abstract parent to all adapters and then decorates
+it with the functionality to carry out the interface methods.  Make sure you understand that.
+
+Changes to the existing interface will not be accepted without a long discussion because they may cause a BC break.
+
+Additions to the interface can be accepted, as long as you make the changes to all the currently supported concrete 
+implementations.
+
+As normal, fork the library, make your changes and request a pull request back into this repo. Put your changes on a branch.
 
 ### Unit Testing
 `make test`
