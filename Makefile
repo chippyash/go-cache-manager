@@ -7,6 +7,6 @@ test: ## Run unit tests
 	go test ./adapter/valkey ./adapter/memory
 
 .PHONY: license-check
-license-check: ## run the Go license checker
+license-check: ## Run the Go license checker
 	go install github.com/google/go-licenses@latest
-	go-licenses report --ignore bitbucket.org/zincdigitaldevelopers ./... > licenses.csv
+	go-licenses report --ignore github.com/chippyash/go-cache-manager ./... > licenses.csv
