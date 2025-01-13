@@ -3,7 +3,6 @@ package valkey
 import (
 	"context"
 	"fmt"
-	"github.com/patrickmn/go-cache"
 	errs "github.com/pkg/errors"
 	"github.com/valkey-io/valkey-go"
 	adapter2 "go-cache-manager/adapter"
@@ -11,6 +10,7 @@ import (
 	"go-cache-manager/storage"
 	"maps"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -326,7 +326,11 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if !adapter.ValidateKey(nsKey) {
 				return 0, errors.ErrKeyInvalid
 			}
-			err := adapter.Client.(*cache.Cache).Increment(nsKey, n)
+			cl := adapter.Client.(valkey.Client)
+			err := cl.Do(
+				context.TODO(),
+				cl.B().Incrby().Key(nsKey).Increment(n).Build(),
+			).Error()
 			if err != nil {
 				return 0, err
 			}
@@ -337,36 +341,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if err != nil {
 				return 0, err
 			}
-			switch val.(type) {
-			case int:
-				return int64(val.(int)), nil
-			case int8:
-				return int64(val.(int8)), nil
-			case int16:
-				return int64(val.(int16)), nil
-			case int32:
-				return int64(val.(int32)), nil
-			case int64:
-				return val.(int64), nil
-			case uint:
-				return int64(val.(uint)), nil
-			case uintptr:
-				return int64(val.(uintptr)), nil
-			case uint8:
-				return int64(val.(uint8)), nil
-			case uint16:
-				return int64(val.(uint16)), nil
-			case uint32:
-				return int64(val.(uint32)), nil
-			case uint64:
-				return int64(val.(uint64)), nil
-			case float32:
-				return int64(val.(float32)), nil
-			case float64:
-				return int64(val.(float64)), nil
-			default:
-				return 0, fmt.Errorf("value for %s is not an integer or integer like", key)
-			}
+			return strconv.ParseInt(val.(string), 10, 64)
 		}).
 		SetDecrementFunc(func(key string, n int64) (int64, error) {
 			if !adapter.GetOptions()[storage.OptWritable].(bool) {
@@ -376,7 +351,11 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if !adapter.ValidateKey(nsKey) {
 				return 0, errors.ErrKeyInvalid
 			}
-			err := adapter.Client.(*cache.Cache).Decrement(nsKey, n)
+			cl := adapter.Client.(valkey.Client)
+			err := cl.Do(
+				context.TODO(),
+				cl.B().Decrby().Key(nsKey).Decrement(n).Build(),
+			).Error()
 			if err != nil {
 				return 0, err
 			}
@@ -387,36 +366,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if err != nil {
 				return 0, err
 			}
-			switch val.(type) {
-			case int:
-				return int64(val.(int)), nil
-			case int8:
-				return int64(val.(int8)), nil
-			case int16:
-				return int64(val.(int16)), nil
-			case int32:
-				return int64(val.(int32)), nil
-			case int64:
-				return val.(int64), nil
-			case uint:
-				return int64(val.(uint)), nil
-			case uintptr:
-				return int64(val.(uintptr)), nil
-			case uint8:
-				return int64(val.(uint8)), nil
-			case uint16:
-				return int64(val.(uint16)), nil
-			case uint32:
-				return int64(val.(uint32)), nil
-			case uint64:
-				return int64(val.(uint64)), nil
-			case float32:
-				return int64(val.(float32)), nil
-			case float64:
-				return int64(val.(float64)), nil
-			default:
-				return 0, fmt.Errorf("value for %s is not an integer or integer like", key)
-			}
+			return strconv.ParseInt(val.(string), 10, 64)
 		}).
 		SetOpenFunc(func() (storage.Storage, error) {
 			c, err := valkey.NewClient(
