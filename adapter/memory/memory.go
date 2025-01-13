@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/patrickmn/go-cache"
 	errs "github.com/pkg/errors"
-	adapter2 "go-cache-manager/adapter"
-	"go-cache-manager/errors"
-	"go-cache-manager/storage"
+	adapter2 "github.com/chippyash/go-cache-manager/adapter"
+	"github.com/chippyash/go-cache-manager/errors"
+	"github.com/chippyash/go-cache-manager/storage"
 	"time"
 )
 

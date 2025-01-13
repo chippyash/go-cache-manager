@@ -1,0 +1,5 @@
+github.com/chippyash/go-cache-manager,https://github.com/chippyash/go-cache-manager/blob/HEAD/LICENSE.txt,MIT
+github.com/patrickmn/go-cache,https://github.com/patrickmn/go-cache/blob/v2.1.0/LICENSE,MIT
+github.com/pkg/errors,https://github.com/pkg/errors/blob/v0.9.1/LICENSE,BSD-2-Clause
+github.com/valkey-io/valkey-go,https://github.com/valkey-io/valkey-go/blob/v1.0.52/LICENSE,Apache-2.0
+golang.org/x/sys/cpu,https://cs.opensource.google/go/x/sys/+/v0.24.0:LICENSE,BSD-3-Clause

@@ -140,5 +140,11 @@ client := cacheManager.Client.(valkey.Client)
 
 ## For Development
 
+### Unit Testing
+`make test`
+
 ## License
-This software is released under the MIT License. See LICENSE.txt for details
+This software is released under the MIT License. See LICENSE.txt for details.
+
+For license information of dependencies, please see licenses.csv.  If the dependencies change run `make license-check`
+to update the file.

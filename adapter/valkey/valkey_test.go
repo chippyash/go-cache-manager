@@ -3,9 +3,9 @@ package valkey_test
 import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
-	"go-cache-manager/adapter/valkey"
-	"go-cache-manager/errors"
-	"go-cache-manager/storage"
+	"github.com/chippyash/go-cache-manager/adapter/valkey"
+	"github.com/chippyash/go-cache-manager/errors"
+	"github.com/chippyash/go-cache-manager/storage"
 	"slices"
 	"testing"
 	"time"

@@ -1,7 +1,7 @@
 package adapter
 
 import (
-	"go-cache-manager/storage"
+	"github.com/chippyash/go-cache-manager/storage"
 	"regexp"
 )
 
@@ -24,10 +24,10 @@ type AbstractAdapter struct {
 	touchItems       func(keys []string) []string
 	removeItem       func(key string) bool
 	removeItems      func(keys []string) []string
-	increment		 func(key string, n int64) (int64, error)
-	decrement		 func(key string, n int64) (int64, error)
-	open func() (storage.Storage, error)
-	close func() error
+	increment        func(key string, n int64) (int64, error)
+	decrement        func(key string, n int64) (int64, error)
+	open             func() (storage.Storage, error)
+	close            func() error
 }
 
 /** Storage Interface **/
@@ -117,7 +117,7 @@ func (a *AbstractAdapter) Close() error {
 
 /** Utility functions **/
 
-//NamespacedKey returns the key suffixed with namespace if any
+// NamespacedKey returns the key suffixed with namespace if any
 func (a *AbstractAdapter) NamespacedKey(key string) string {
 	ns := a.options[storage.OptNamespace].(string)
 	if ns != "" {
@@ -126,7 +126,7 @@ func (a *AbstractAdapter) NamespacedKey(key string) string {
 	return key
 }
 
-//ValidateKey validates the key against the regex pattern in options[storage.OptKeyPattern] if any
+// ValidateKey validates the key against the regex pattern in options[storage.OptKeyPattern] if any
 func (a *AbstractAdapter) ValidateKey(key string) bool {
 	p := a.options[storage.OptKeyPattern].(string)
 	if p == "" {

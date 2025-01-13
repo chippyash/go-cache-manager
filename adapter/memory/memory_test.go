@@ -1,12 +1,12 @@
 package memory_test
 
 import (
+	"github.com/chippyash/go-cache-manager/adapter"
+	"github.com/chippyash/go-cache-manager/adapter/memory"
+	"github.com/chippyash/go-cache-manager/errors"
+	"github.com/chippyash/go-cache-manager/storage"
 	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
-	"go-cache-manager/adapter"
-	"go-cache-manager/adapter/memory"
-	"go-cache-manager/errors"
-	"go-cache-manager/storage"
 	"slices"
 	"testing"
 	"time"

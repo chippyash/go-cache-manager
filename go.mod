@@ -1,4 +1,4 @@
-module go-cache-manager
+module github.com/chippyash/go-cache-manager
 
 go 1.23.4
 
