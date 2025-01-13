@@ -18,7 +18,8 @@ Go V1.23.4+
 ## For Production
 
 ```go
-import "github.com/chippyash/go-cache-manager/adapter"
+import "github.com/chippyash/go-cache-manager/adapter/valkey"
+import "github.com/chippyash/go-cache-manager/adapter/memory"
 import "github.com/chippyash/go-cache-manager/storage"
 ```
 
@@ -28,7 +29,7 @@ import "github.com/chippyash/go-cache-manager/storage"
 ns := "myNameSpace:"  //this can be left blank
 ttl := time.Minute * 5 //Expiry Ttl
 purgeTtl := time.Minute * 10  //set the purgeTtl > ttl
-cacheManager := adapter.memory.New(ns, ttl, purgeTtl)
+cacheManager := memory.New(ns, ttl, purgeTtl)
 ```
 
 The underlying client for the Memory Cache is [github.com/patrickmn/go-cache](github.com/patrickmn/go-cache)
@@ -41,7 +42,7 @@ host := "127.0.0.1"
 ttl := time.Minute * 5 //Expiry Ttl
 clientCaching := true //we want to use client side caching
 clientCachingTtl = time.Minute * 4 //set this to less than the ttl
-cacheManager, err := adapter.valkey.New(ns, host, ttl, clientCaching, clientCachingTtl).Open()
+cacheManager, err := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl).Open()
 if err != nil {
 	panic(err)
 }
@@ -57,8 +58,8 @@ cache adapters in your application and be certain that their entries are separat
 The library supports chaining adapters together.
 
 ```go
-cacheManager := adapter.memory.New(ns, ttl, purgeTtl)
-chainedAdapter, err := := adapter.valkey.New(ns, host, ttl, false, time.Second * 0).Open()
+cacheManager := memory.New(ns, ttl, purgeTtl)
+chainedAdapter, err := := valkey.New(ns, host, ttl, false, time.Second * 0).Open()
 cacheManager.(storage.Chainable).ChainAdapter(chainedAdapter)
 ```
 
@@ -78,7 +79,7 @@ Similarly, although no functionality currently exists in the Close method for th
 the habit of deferring a call to it.
 
 ```go
-adapter, err := adapter.valkey.New(ns, host, ttl, false, time.Second * 0).Open()
+adapter, err := valkey.New(ns, host, ttl, false, time.Second * 0).Open()
 if err != nil {
 	panic(err)
 }
@@ -97,7 +98,7 @@ by calling `adapter.SetOptions(opts)`. opts is a storage.StorageOptions object. 
 set of options, but may have additional options specific to the adapter.
 
 ```go
-cache := adapter.valkey.New(ns, host, ttl, false, time.Second * 0)
+cache := valkey.New(ns, host, ttl, false, time.Second * 0)
 opts := cache.GetOptions()
 //do something with the options
 // ...
@@ -109,11 +110,11 @@ Note that the options are untyped. You need to type them correctly in order to u
 
 ```go
 opts := cache.GetOptions()
-valkeyOpts := opts[adapter.valkey.OptValkeyOptions].(valkey.ClientOption)
+valkeyOpts := opts[valkey.OptValkeyOptions].(valkey.ClientOption)
 //set up cluster connection
 valkeyOpts.InitAddress = []string{"127.0.0.1:7001", "127.0.0.1:7002", "127.0.0.1:7003"}
 valkeyOpts.ShuffleInit = true
-opts[adapter.valkey.OptValkeyOptions] = valkeyOpts
+opts[valkey.OptValkeyOptions] = valkeyOpts
 cache.SetOptions(opts)
 cache, err := cache.Open()
 ```
@@ -124,19 +125,19 @@ and act upon your cache backend more directly.
 
 #### Memory Cache Client
 ```go
-import "github.com/chippyash/go-cache-manager/adapter"
+import "github.com/chippyash/go-cache-manager/adapter/memory"
 import "github.com/patrickmn/go-cache"
 
-cacheManager := adapter.memory.New(ns, ttl, purgeTtl)
+cacheManager := memory.New(ns, ttl, purgeTtl)
 client := cacheManager.Client.(*cache.Cache)
 ```
 
 #### Valkey Cache Client
 ```go
-import "github.com/chippyash/go-cache-manager/adapter"
+import vk "github.com/chippyash/go-cache-manager/adapter/valkey"
 import "github.com/valkey-io/valkey-go"
 
-cacheManager, err := adapter.valkey.New(ns, host, ttl, clientCaching, clientCachingTtl).Open()
+cacheManager, err := vk.New(ns, host, ttl, clientCaching, clientCachingTtl).Open()
 client := cacheManager.Client.(valkey.Client)
 ```
 
