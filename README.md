@@ -6,6 +6,8 @@
 Provides a simplified interface to key/value cache management utilising adaptors to provide the same functionality for
 different cache databases.
 
+Go V1.23.4+
+
 ### Current backends
 
  - Memory
