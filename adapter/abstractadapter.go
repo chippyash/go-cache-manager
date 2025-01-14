@@ -3,6 +3,7 @@ package adapter
 import (
 	"github.com/chippyash/go-cache-manager/storage"
 	"regexp"
+	"strings"
 )
 
 // AbstractAdapter is the abstract base adapter on which all adapters are built.
@@ -122,6 +123,14 @@ func (a *AbstractAdapter) NamespacedKey(key string) string {
 	ns := a.options[storage.OptNamespace].(string)
 	if ns != "" {
 		key = ns + key
+	}
+	return key
+}
+
+func (a *AbstractAdapter) StripNamespace(key string) string {
+	ns := a.options[storage.OptNamespace].(string)
+	if ns != "" {
+		key = strings.Replace(key, ns, "", 1)
 	}
 	return key
 }

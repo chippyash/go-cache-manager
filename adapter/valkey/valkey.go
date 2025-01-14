@@ -8,8 +8,6 @@ import (
 	"github.com/chippyash/go-cache-manager/storage"
 	errs "github.com/pkg/errors"
 	"github.com/valkey-io/valkey-go"
-	"maps"
-	"slices"
 	"strconv"
 	"time"
 )
@@ -27,6 +25,10 @@ const (
 	OptValkeyOptions
 	//OptManageTypes set true to manage data types
 	OptManageTypes
+)
+
+const (
+	ManagedDataPrefixTpl = "gcm:%s"
 )
 
 func New(namespace string, host string, ttl time.Duration, clientCaching bool, clientCachingTtl time.Duration, manageTypes bool) storage.Storage {
@@ -69,7 +71,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			return errs.Wrap(errors.ErrUnsupportedDataType, fmt.Sprintf("key: %s type: %d, value: %v", k, t, v))
 		}
 		cl := adapter.Client.(valkey.Client)
-		key := fmt.Sprintf("gcc:%s", k)
+		key := fmt.Sprintf(ManagedDataPrefixTpl, k)
 		_ = cl.Do(
 			context.TODO(),
 			cl.B().Set().Key(key).Value(anyToString(t)).Nx().Build(),
@@ -87,7 +89,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if !adapter.GetOptions()[storage.OptDataTypes].(storage.DataTypes)[t] {
 				return errs.Wrap(errors.ErrUnsupportedDataType, fmt.Sprintf("key: %s type: %d, value: %v", k, t, v))
 			}
-			key := fmt.Sprintf("gcc:%s", k)
+			key := fmt.Sprintf(ManagedDataPrefixTpl, k)
 			cmds = append(cmds, cl.B().Set().Key(key).Value(anyToString(t)).Nx().Build())
 		}
 		_ = cl.DoMulti(
@@ -152,15 +154,33 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 					if !adapter.ValidateKey(nsKey) {
 						return ret, errs.Wrap(errors.ErrKeyInvalid, "failed to get item")
 					}
-					cmds = append(cmds, valkey.CT(cl.B().Get().Key(nsKey).Cache(), adapter.GetOptions()[OptClientCachingTtl].(time.Duration)))
+					cmds = append(
+						cmds,
+						valkey.CT(
+							cl.B().Get().Key(nsKey).Cache().Pin(),
+							adapter.GetOptions()[OptClientCachingTtl].(time.Duration),
+						),
+					)
 				}
 				for i, resp := range cl.DoMultiCache(context.TODO(), cmds...) {
-					if resp.Error() == nil {
-						v, err3 := resp.ToAny()
-						ret[keys[i]] = v
-						if err3 != nil {
-							err2 = errs.Wrap(err3, "failed to get item")
+					cmdKey := adapter.StripNamespace(cmds[i].Cmd.Commands()[1])
+					if resp.Error() != nil {
+						if adapter.GetChained() != nil {
+							v, err3 := adapter.GetChained().GetItem(cmdKey)
+							if err3 != nil {
+								return ret, errs.Wrap(err3, "failed to get item")
+							}
+							adapter.SetItem(cmdKey, v)
+							ret[cmdKey] = v
+							continue
 						}
+						err2 = errs.Wrap(resp.Error(), "failed to get item")
+						continue
+					}
+					v, err3 := resp.ToAny()
+					ret[cmdKey] = v
+					if err3 != nil {
+						err2 = errs.Wrap(err3, "failed to get item")
 					}
 				}
 			case false:
@@ -170,24 +190,25 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 					if !adapter.ValidateKey(nsKey) {
 						return ret, errs.Wrap(errors.ErrKeyInvalid, "failed to get item")
 					}
-					cmds = append(cmds, cl.B().Get().Key(nsKey).Build())
+					cmds = append(cmds, cl.B().Get().Key(nsKey).Build().Pin())
 				}
 				for i, resp := range cl.DoMulti(context.TODO(), cmds...) {
+					cmdKey := adapter.StripNamespace(cmds[i].Commands()[1])
 					if resp.Error() != nil {
 						if adapter.GetChained() != nil {
-							v, err3 := adapter.GetChained().GetItem(keys[i])
+							v, err3 := adapter.GetChained().GetItem(cmdKey)
 							if err3 != nil {
 								return ret, errs.Wrap(err3, "failed to get item")
 							}
-							adapter.SetItem(keys[i], v)
-							ret[keys[i]] = v
+							adapter.SetItem(cmdKey, v)
+							ret[cmdKey] = v
 							continue
 						}
 						err2 = errs.Wrap(resp.Error(), "failed to get item")
 						continue
 					}
 					v, err3 := resp.ToAny()
-					ret[keys[i]] = v
+					ret[cmdKey] = v
 					if err3 != nil {
 						err2 = errs.Wrap(err3, "failed to get item")
 					}
@@ -228,18 +249,19 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 				if !adapter.ValidateKey(nsKey) {
 					return keys, errors.ErrKeyInvalid
 				}
-				cmds = append(cmds, cl.B().Set().Key(nsKey).Value(anyToString(value)).Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build())
+				cmds = append(
+					cmds,
+					cl.B().Set().Key(nsKey).Value(anyToString(value)).Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build().Pin(),
+				)
 			}
 
-			responses := cl.DoMulti(context.TODO(), cmds...)
-			keyNames := slices.Collect(maps.Keys(values))
-			for i := 0; i < len(values); i++ {
-				if responses[i].Error() != nil {
-					err = errs.Wrap(responses[i].Error(), "failed to set item")
+			for i, resp := range cl.DoMulti(context.TODO(), cmds...) {
+				cmdKey := adapter.StripNamespace(cmds[i].Commands()[1])
+				if resp.Error() != nil {
+					err = errs.Wrap(resp.Error(), "failed to set item")
 					continue
 				}
-
-				keys[i] = keyNames[i]
+				keys[i] = cmdKey
 			}
 			if err != nil {
 				return keys, err
