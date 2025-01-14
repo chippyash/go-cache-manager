@@ -1,5 +1,5 @@
 # Multi Adapter Cache Manager
-## https://github.com/chippash/go-cache-manager
+## github.com/chippash/go-cache-manager
 
 ## What
 
@@ -15,7 +15,7 @@ This will never try to be a friend to all. For straightforward caching operation
 
  - Given the Go language, be as simple as possible
  - Deal with straight forward key/value caching
- - Make each cache backends look the same, so they can be swapped in and out
+ - Make each cache backend look the same, so they can be swapped in and out
  - Allow devs to use the native client if they need to 
 
 ### Current backends
@@ -47,7 +47,7 @@ purgeTtl := time.Minute * 10  //set the purgeTtl > ttl
 cacheManager := memory.New(ns, ttl, purgeTtl)
 ```
 
-The underlying client for the Memory Cache is [github.com/patrickmn/go-cache](github.com/patrickmn/go-cache)
+The underlying client for the Memory Cache is [github.com/patrickmn/go-cache](https://github.com/patrickmn/go-cache)
 
 Using the setter methods for the Memory cache adapter allows you pass any type of value. The value will be stored as-is
 in memory and returned via any of the getter methods as type interface{} (any). You are responsible for casting it to your 
