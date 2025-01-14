@@ -1,7 +1,9 @@
 package valkey
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	adapter2 "github.com/chippyash/go-cache-manager/adapter"
 	"github.com/chippyash/go-cache-manager/errors"
@@ -26,6 +28,8 @@ const (
 	OptValkeyOptions
 	//OptManageTypes set true to manage data types. type: bool
 	OptManageTypes
+	//OptDatetimeFormat the datetime format to use for the cache datetime values when data types are managed. Defaults to time.RFC3339. type: string
+	OptDatetimeFormat
 )
 const (
 	//ManagedDataTypeCacheKeyPrefix the prefix for the managed data type cache key.
@@ -54,7 +58,8 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			InitAddress:  []string{host},
 			DisableCache: !clientCaching,
 		},
-		OptManageTypes: manageTypes,
+		OptManageTypes:    manageTypes,
+		OptDatetimeFormat: time.RFC3339,
 	}
 
 	adapter := new(adapter2.AbstractAdapter)
@@ -62,7 +67,17 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 	adapter.SetOptions(opts)
 
 	anyToString := func(v any) string {
-		return fmt.Sprintf("%v", v)
+		switch v.(type) {
+		case time.Time:
+			return v.(time.Time).Format(adapter.GetOptions()[OptDatetimeFormat].(string))
+		case []byte:
+			var w bytes.Buffer
+			enc := gob.NewEncoder(&w)
+			_ = enc.Encode(v)
+			return w.String()
+		default:
+			return fmt.Sprintf("%v", v)
+		}
 	}
 
 	setType := func(k string, v any) error {
@@ -101,7 +116,6 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 		)
 		return nil
 	}
-
 	getTyped := func(k, v string) (any, error) {
 		if !adapter.GetOptions()[OptManageTypes].(bool) {
 			return v, nil
@@ -123,9 +137,8 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 		if err != nil {
 			return nil, errs.Wrap(err, "failed to get type")
 		}
-		return storage.GetTypedValue(t, v)
+		return storage.GetTypedValue(t, v, adapter.GetOptions()[OptDatetimeFormat].(string))
 	}
-
 	getTypedMulti := func(vals map[string]any) (map[string]any, error) {
 		if !adapter.GetOptions()[OptManageTypes].(bool) {
 			return vals, nil
@@ -150,13 +163,39 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if err != nil {
 				return nil, errs.Wrap(err, "failed to get type")
 			}
-			vv, err := storage.GetTypedValue(t, anyToString(vals[cmdKey]))
+			vv, err := storage.GetTypedValue(t, anyToString(vals[cmdKey]), adapter.GetOptions()[OptDatetimeFormat].(string))
 			if err != nil {
 				return nil, errs.Wrap(err, "failed to get typed value")
 			}
 			ret[cmdKey] = vv
 		}
 		return ret, nil
+	}
+	delType := func(k string) error {
+		if !adapter.GetOptions()[OptManageTypes].(bool) {
+			return nil
+		}
+		cl := adapter.Client.(valkey.Client)
+		key := fmt.Sprintf(ManagedDataTypeCacheTpl, adapter.NamespacedKey(k))
+		return cl.Do(
+			context.TODO(),
+			cl.B().Del().Key(key).Build(),
+		).Error()
+	}
+
+	delTypeMulti := func(keys []string) error {
+		if !adapter.GetOptions()[OptManageTypes].(bool) {
+			return nil
+		}
+		cl := adapter.Client.(valkey.Client)
+		nsKeys := make([]string, len(keys))
+		for i, k := range keys {
+			nsKeys[i] = fmt.Sprintf(ManagedDataTypeCacheTpl, adapter.NamespacedKey(k))
+		}
+		return cl.Do(
+			context.TODO(),
+			cl.B().Del().Key(nsKeys...).Build(),
+		).Error()
 	}
 
 	//set the functions
@@ -314,9 +353,10 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 				if !adapter.ValidateKey(nsKey) {
 					return keys, errors.ErrKeyInvalid
 				}
+				vv := anyToString(value)
 				cmds = append(
 					cmds,
-					cl.B().Set().Key(nsKey).Value(anyToString(value)).Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build().Pin(),
+					cl.B().Set().Key(nsKey).Value(vv).Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build().Pin(),
 				)
 			}
 
@@ -407,27 +447,54 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if !adapter.GetOptions()[storage.OptWritable].(bool) {
 				return false
 			}
-			val, err := adapter.GetItem(key)
-			if err != nil {
+			nsKey := adapter.NamespacedKey(key)
+			if !adapter.ValidateKey(nsKey) {
 				return false
 			}
-			ok, err := adapter.SetItem(key, val)
-			if err != nil {
-				return false
-			}
+			cl := adapter.Client.(valkey.Client)
+			resp, _ := cl.Do(
+				context.TODO(),
+				cl.B().Touch().Key(nsKey).Build(),
+			).AsInt64()
 			if adapter.GetChained() != nil {
-				return adapter.GetChained().TouchItem(key)
+				_ = adapter.GetChained().TouchItem(key)
 			}
-			return ok
+			return resp == int64(1)
 		}).
 		SetTouchItemsFunc(func(keys []string) []string {
-			ret := make([]string, 0)
+			if !adapter.GetOptions()[storage.OptReadable].(bool) {
+				return []string{}
+			}
+			if !adapter.GetOptions()[storage.OptWritable].(bool) {
+				return []string{}
+			}
+			cl := adapter.Client.(valkey.Client)
+			cmds := make(valkey.Commands, 0, len(keys))
 			for _, key := range keys {
-				if adapter.TouchItem(key) {
-					ret = append(ret, key)
+				nsKey := adapter.NamespacedKey(key)
+				if !adapter.ValidateKey(nsKey) {
+					return []string{}
+				}
+				cmds = append(cmds, cl.B().Touch().Key(nsKey).Build().Pin())
+			}
+			retkeys := make([]string, 0)
+			for i, resp := range cl.DoMulti(
+				context.TODO(),
+				cmds...,
+			) {
+				cmdKey := adapter.StripNamespace(cmds[i].Commands()[1])
+				if resp.Error() != nil {
+					continue
+				}
+				hit, err := resp.AsInt64()
+				if err == nil && hit == int64(1) {
+					retkeys = append(retkeys, cmdKey)
 				}
 			}
-			return ret
+			if adapter.GetChained() != nil {
+				_ = adapter.GetChained().TouchItems(keys)
+			}
+			return retkeys
 		}).
 		SetRemoveItemFunc(func(key string) bool {
 			if !adapter.GetOptions()[storage.OptWritable].(bool) {
@@ -445,13 +512,37 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			if adapter.GetChained() != nil {
 				return adapter.GetChained().RemoveItem(key)
 			}
+			_ = delType(key)
 			return err2 == nil
 		}).
 		SetRemoveItemsFunc(func(keys []string) []string {
+			cl := adapter.Client.(valkey.Client)
+			cmds := make(valkey.Commands, 0, len(keys))
 			for _, key := range keys {
-				adapter.RemoveItem(key)
+				nsKey := adapter.NamespacedKey(key)
+				if !adapter.ValidateKey(nsKey) {
+					return []string{}
+				}
+				cmds = append(cmds, cl.B().Del().Key(nsKey).Build().Pin())
 			}
-			return keys
+			ret := make([]string, 0)
+			for i, resp := range cl.DoMulti(
+				context.TODO(),
+				cmds...,
+			) {
+				cmdKey := adapter.StripNamespace(cmds[i].Commands()[1])
+				if resp.Error() != nil {
+					continue
+				}
+				if hit, err := resp.AsInt64(); err == nil && hit == int64(1) {
+					ret = append(ret, cmdKey)
+				}
+			}
+			if adapter.GetChained() != nil {
+				return adapter.GetChained().RemoveItems(keys)
+			}
+			_ = delTypeMulti(keys)
+			return ret
 		}).
 		SetIncrementFunc(func(key string, n int64) (int64, error) {
 			if !adapter.GetOptions()[storage.OptWritable].(bool) {

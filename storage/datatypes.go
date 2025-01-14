@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"bytes"
+	"encoding/gob"
 	"strconv"
 	"time"
 )
@@ -27,8 +29,9 @@ const (
 )
 
 type DataTypes map[int]bool
+
 var DefaultDataTypes = DataTypes{
-	TypeUnknown:   true,
+	TypeUnknown:   false,
 	TypeBoolean:   true,
 	TypeInteger:   true,
 	TypeInteger8:  true,
@@ -89,7 +92,7 @@ func GetType(v any) int {
 	}
 }
 
-func GetTypedValue(t int, v string) (any, error) {
+func GetTypedValue(t int, v string, dateFormat string) (any, error) {
 	switch t {
 	case TypeString:
 		return v, nil
@@ -128,14 +131,16 @@ func GetTypedValue(t int, v string) (any, error) {
 	case TypeDuration:
 		return time.ParseDuration(v)
 	case TypeTime:
-		return time.Parse(time.RFC3339, v)
+		return time.Parse(dateFormat, v)
 	case TypeBoolean:
 		return strconv.ParseBool(v)
 	case TypeBytes:
-		return []byte(v), nil
+		var w bytes.Buffer
+		_, _ = w.Write([]byte(v))
+		var s []byte
+		err := gob.NewDecoder(&w).Decode(&s)
+		return s, err
 	default:
 		return v, nil
 	}
 }
-
-

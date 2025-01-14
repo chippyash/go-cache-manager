@@ -7,6 +7,7 @@ import (
 	"github.com/chippyash/go-cache-manager/errors"
 	"github.com/chippyash/go-cache-manager/storage"
 	"github.com/stretchr/testify/assert"
+	"maps"
 	"slices"
 	"strconv"
 	"testing"
@@ -92,35 +93,68 @@ func TestValkeyAdapter_GetAndSetMultipleItemsManaged(t *testing.T) {
 	sut := valkey.New("", rs.Addr(), time.Second*60, false, time.Second*0, true)
 	sut, err := sut.Open()
 	assert.NoError(t, err)
+	tm, err := time.Parse(time.RFC3339, "2025-01-14T13:07:00+01:00")
+	assert.NoError(t, err)
 	vals := map[string]any{
-		"key1": "value1",
-		"key2": 2,
-		"key3": true,
+		"TypeBoolean":   true,
+		"TypeInteger":   2,
+		"TypeInteger8":  int8(8),
+		"TypeInteger16": int16(16),
+		"TypeInteger32": int32(32),
+		"TypeInteger64": int64(64),
+		"TypeUint":      uint(2),
+		"TypeUint8":     uint8(8),
+		"TypeUint16":    uint16(16),
+		"TypeUint32":    uint32(32),
+		"TypeUint64":    uint64(64),
+		"TypeFloat32":   float32(32.6),
+		"TypeFloat64":   float64(64.6),
+		"TypeString":    "value",
+		"TypeDuration":  time.Second,
+		"TypeTime":      tm,
+		"TypeBytes":     []byte("value"),
 	}
 	keys, err := sut.SetItems(vals)
 	assert.NoError(t, err)
-	assert.ElementsMatch(t, []string{"key1", "key2", "key3"}, keys)
+	expectedKeys := slices.Collect(maps.Keys(vals))
+	assert.ElementsMatch(t, expectedKeys, keys)
 
 	//check that we have a data management entries in cache
-	typ, err := rs.Get("gcm:key1")
-	assert.NoError(t, err)
-	i64, err := strconv.ParseInt(typ, 10, 64)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(storage.TypeString), i64)
-	typ, err = rs.Get("gcm:key2")
-	assert.NoError(t, err)
-	i64, err = strconv.ParseInt(typ, 10, 64)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(storage.TypeInteger), i64)
-	typ, err = rs.Get("gcm:key3")
-	assert.NoError(t, err)
-	i64, err = strconv.ParseInt(typ, 10, 64)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(storage.TypeBoolean), i64)
+	typs := map[string]int{
+		"gcm:TypeBoolean":   storage.TypeBoolean,
+		"gcm:TypeInteger":   storage.TypeInteger,
+		"gcm:TypeInteger8":  storage.TypeInteger8,
+		"gcm:TypeInteger16": storage.TypeInteger16,
+		"gcm:TypeInteger32": storage.TypeInteger32,
+		"gcm:TypeInteger64": storage.TypeInteger64,
+		"gcm:TypeUint":      storage.TypeUint,
+		"gcm:TypeUint8":     storage.TypeUint8,
+		"gcm:TypeUint16":    storage.TypeUint16,
+		"gcm:TypeUint32":    storage.TypeUint32,
+		"gcm:TypeUint64":    storage.TypeUint64,
+		"gcm:TypeFloat32":   storage.TypeFloat32,
+		"gcm:TypeFloat64":   storage.TypeFloat64,
+		"gcm:TypeString":    storage.TypeString,
+		"gcm:TypeDuration":  storage.TypeDuration,
+		"gcm:TypeTime":      storage.TypeTime,
+		"gcm:TypeBytes":     storage.TypeBytes,
+	}
+	for k, tp := range typs {
+		typ, err2 := rs.Get(k)
+		assert.NoError(t, err2)
+		i64, err2 := strconv.ParseInt(typ, 10, 64)
+		assert.NoError(t, err2)
+		assert.Equal(t, int64(tp), i64)
+	}
 
 	ret, err := sut.GetItems(keys)
 	assert.NoError(t, err)
 	assert.Equal(t, vals, ret)
+
+	//check that the []byte value was serialized properly
+	byt, err := rs.Get("TypeBytes")
+	assert.NoError(t, err)
+	assert.Equal(t, "\b\n\u0000\u0005value", byt)
 }
 
 func TestValkeyAdapter_HasItem(t *testing.T) {

@@ -15,7 +15,7 @@ This will never try to be a friend to all. For straightforward caching operation
 
  - Given the Go language, be as simple as possible
  - Deal with straight forward key/value caching
- - Make each cache backend look the same, so they can be swapped in and out
+ - Make each cache backends look the same, so they can be swapped in and out
  - Allow devs to use the native client if they need to 
 
 ### Current backends
@@ -27,7 +27,7 @@ This will never try to be a friend to all. For straightforward caching operation
 
 Go V1.23.4+
 
-Please consider any version at < 1 as pre production. Use at your own risk. But please do try it out. The more feedback 
+**Please consider any version at < 1 as pre production**. Use at your own risk. But please do try it out. The more feedback 
 I get, the better it will be.
 
 ## For Production
@@ -107,6 +107,35 @@ if err != nil {
 someValue = uint32(u64)
 ```
 
+As this can get tiresome if you have to do a lot of conversion, you can switch on data management by setting the 'manageTypes'
+parameter for valkey.New() (the last parameter) to true.  When getting cache items, they will be returned as the same type 
+in which they were set.
+
+This is achieved by recording the item's data type in the cache in the 'gcm' namespace. Of course, having to hit the cache
+twice, means that performance will be marginally impacted but you might consider this an acceptable cost in return for easier
+data handling. It also means that the Valkey/Redis adapter works in the same way as the Memory adapter making swapping 
+one for another a breeze.
+
+```go
+cacheManager := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl, true).Open()
+someValue := []byte("foobar")
+ok, err := cacheManager.SetItem("key", someValue)
+if !ok || err != nil {
+	panic(errors.Wrap(err, "could not set value for key"))
+}
+v, err := cacheManager.GetItem("key")
+if err != nil {
+	panic(err)
+}
+fetchedValue := v.([]byte)
+//true == bytes.Equal(someValue, fetchedValue)
+```
+
+For time.Time values to work correctly, we need to know the formatting string to use. This is set in the adapter
+options (see 'Setting options' below). You need to set the `valkey.OptDatetimeFormat` to your required format. It is set to
+`time.RFC3339` by default.
+
+
 ### Namespaces
 Each adapter allows you to declare a namespace. This is simply prefixed to any key value that you use. Thus, you can create multiple
 cache adapters in your application and be certain that their entries are separated out in your cache backend.
@@ -166,12 +195,15 @@ cache, err := cache.Open()
 Note that the options are untyped. You need to type them correctly in order to use them.
 
 ```go
+import vk "github.com/chippyash/go-cache-manager/adapter/valkey"
+import "github.com/valkey-io/valkey-go"
+
 opts := cache.GetOptions()
-valkeyOpts := opts[valkey.OptValkeyOptions].(valkey.ClientOption)
+valkeyOpts := opts[vk.OptValkeyOptions].(valkey.ClientOption)
 //set up cluster connection
 valkeyOpts.InitAddress = []string{"127.0.0.1:7001", "127.0.0.1:7002", "127.0.0.1:7003"}
 valkeyOpts.ShuffleInit = true
-opts[valkey.OptValkeyOptions] = valkeyOpts
+opts[vk.OptValkeyOptions] = valkeyOpts
 cache.SetOptions(opts)
 cache, err := cache.Open()
 ```
@@ -215,6 +247,10 @@ As normal, fork the library, make your changes and request a pull request back i
 
 ### Unit Testing
 `make test`
+
+Unit tests for the Valkey adapter run against [miniredis](github.com/alicebob/miniredis/v2) which does not offer support
+for client side caching. Thus, this piece of functionality is currently untested, so be aware!  In due course, I'll get 
+the test suite running against a real Valkey server
 
 ## License
 This software is released under the MIT License. See LICENSE.txt for details.
