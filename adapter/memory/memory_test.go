@@ -7,6 +7,7 @@ import (
 	"github.com/chippyash/go-cache-manager/storage"
 	"github.com/patrickmn/go-cache"
 	"github.com/stretchr/testify/assert"
+	"maps"
 	"slices"
 	"testing"
 	"time"
@@ -34,14 +35,32 @@ func TestMemoryAdapter_GetUnknownItem(t *testing.T) {
 
 func TestMemoryAdapter_GetAndSetMultipleItems(t *testing.T) {
 	sut := memory.New("", time.Second*60, time.Second*120)
+	tm, err := time.Parse(time.RFC3339, "2025-01-14T13:07:00+01:00")
+	assert.NoError(t, err)
 	vals := map[string]any{
-		"key1": "value1",
-		"key2": 2,
-		"key3": true,
+		"TypeBoolean":   true,
+		"TypeInteger":   2,
+		"TypeInteger8":  int8(8),
+		"TypeInteger16": int16(16),
+		"TypeInteger32": int32(32),
+		"TypeInteger64": int64(64),
+		"TypeUint":      uint(2),
+		"TypeUint8":     uint8(8),
+		"TypeUint16":    uint16(16),
+		"TypeUint32":    uint32(32),
+		"TypeUint64":    uint64(64),
+		"TypeFloat32":   float32(32.6),
+		"TypeFloat64":   float64(64.6),
+		"TypeString":    "value",
+		"TypeDuration":  time.Second,
+		"TypeTime":      tm,
+		"TypeBytes":     []byte("value"),
 	}
+
 	keys, err := sut.SetItems(vals)
 	assert.NoError(t, err)
-	assert.ElementsMatch(t, []string{"key1", "key2", "key3"}, keys)
+	expectedKeys := slices.Collect(maps.Keys(vals))
+	assert.ElementsMatch(t, expectedKeys, keys)
 
 	ret, err := sut.GetItems(keys)
 	assert.NoError(t, err)
