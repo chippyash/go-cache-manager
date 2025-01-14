@@ -8,6 +8,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/valkey-io/valkey-go v1.0.52
+	github.com/wk8/go-ordered-map v1.0.0
 )
 
 require (
