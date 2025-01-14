@@ -257,3 +257,9 @@ This software is released under the MIT License. See LICENSE.txt for details.
 
 For license information of dependencies, please see licenses.csv.  If the dependencies change run `make license-check`
 to update the file.
+
+## Some thanks
+ - Thanks to the original Zend team that came up with Zend/Cache, some of whom I know, but they shall be nameless. They
+gave many hours of sport back in the day!
+ - Thanks to [@rueian](https://github.com/rueian) for his very fast support on Valkey. He is a main contributor to Valkey.
+Thanks to him this lib took 2.5 days to write instead of 2.5 weeks.
