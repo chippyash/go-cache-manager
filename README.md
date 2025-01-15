@@ -141,7 +141,7 @@ Each adapter allows you to declare a namespace. This is simply prefixed to any k
 cache adapters in your application and be certain that their entries are separated out in your cache backend.
 
 Traditionally in Redis we split out cache names using the ':' character. This is recognised by many Redis clients and is 
-used to create a tree hierarchy display of cache keys. To achieve the same set the namespace name as '<name>:', e.g. 'categories:'.
+used to create a tree hierarchy display of cache keys. To achieve the same set the namespace name as '\<name>:', e.g. 'categories:'.
 
 ### Chaining adapters
 The library supports chaining adapters together.
