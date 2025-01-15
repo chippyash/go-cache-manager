@@ -28,7 +28,7 @@ This will never try to be a friend to all. For straightforward caching operation
 Go V1.23.4+
 
 **Please consider any version of this library at < 1 as pre production**. Use at your own risk. But please do try it out. The more feedback 
-I get, the better it will be.
+I get, the better it will be.  That said, I am using it in production.
 
 ## For Production
 
