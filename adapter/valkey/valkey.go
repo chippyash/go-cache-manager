@@ -92,9 +92,20 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 		key := fmt.Sprintf(ManagedDataTypeCacheTpl, adapter.NamespacedKey(k))
 		_ = cl.Do(
 			context.TODO(),
-			cl.B().Set().Key(key).Value(anyToString(t)).Nx().Build(),
+			cl.B().Set().Key(key).Value(anyToString(t)).Nx().Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build(),
 		)
 		return nil
+	}
+	touchType := func(k string) error {
+		if !adapter.GetOptions()[OptManageTypes].(bool) {
+			return nil
+		}
+		cl := adapter.Client.(valkey.Client)
+		key := fmt.Sprintf(ManagedDataTypeCacheTpl, adapter.NamespacedKey(k))
+		return cl.Do(
+			context.TODO(),
+			cl.B().Expire().Key(key).Seconds(int64(adapter.GetOptions()[storage.OptTTL].(time.Duration).Seconds())).Build(),
+		).Error()
 	}
 	setTypeMulti := func(vals map[string]any) error {
 		if !adapter.GetOptions()[OptManageTypes].(bool) {
@@ -108,7 +119,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 				return errs.Wrap(errors.ErrUnsupportedDataType, fmt.Sprintf("key: %s type: %d, value: %v", k, t, v))
 			}
 			key := fmt.Sprintf(ManagedDataTypeCacheTpl, adapter.NamespacedKey(k))
-			cmds = append(cmds, cl.B().Set().Key(key).Value(anyToString(t)).Nx().Build())
+			cmds = append(cmds, cl.B().Set().Key(key).Value(anyToString(t)).Nx().Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build())
 		}
 		_ = cl.DoMulti(
 			context.TODO(),
@@ -415,17 +426,22 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 				return false, errors.ErrKeyInvalid
 			}
 			cl := adapter.Client.(valkey.Client)
-			err2 := cl.Do(
+			resp := cl.Do(
 				context.TODO(),
 				cl.B().Set().Key(nsKey).Value(anyToString(value)).Xx().Ex(adapter.GetOptions()[storage.OptTTL].(time.Duration)).Build(),
-			).Error()
-			if err2 != nil {
-				return false, errs.Wrap(err2, errors.ErrKeyNotFound.Error())
+			)
+			if resp.Error() != nil {
+				return false, errs.Wrap(resp.Error(), errors.ErrKeyNotFound.Error())
 			}
+			ret, err := resp.ToString()
+			hit := ret == "OK"
 			if adapter.GetChained() != nil {
 				return adapter.GetChained().CheckAndSetItem(key, value)
 			}
-			return err2 == nil, err2
+			if hit {
+				return hit, touchType(key)
+			}
+			return hit, err
 		}).
 		SetCheckAndSetItemsFunc(func(values map[string]any) ([]string, error) {
 			keys := make([]string, 0)
@@ -454,12 +470,16 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 			cl := adapter.Client.(valkey.Client)
 			resp, _ := cl.Do(
 				context.TODO(),
-				cl.B().Touch().Key(nsKey).Build(),
+				cl.B().Expire().Key(nsKey).Seconds(int64(adapter.GetOptions()[storage.OptTTL].(time.Duration).Seconds())).Build(),
 			).AsInt64()
+			hit := resp == int64(1)
+			if hit {
+				_ = touchType(key)
+			}
 			if adapter.GetChained() != nil {
 				_ = adapter.GetChained().TouchItem(key)
 			}
-			return resp == int64(1)
+			return hit
 		}).
 		SetTouchItemsFunc(func(keys []string) []string {
 			if !adapter.GetOptions()[storage.OptReadable].(bool) {
@@ -475,7 +495,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 				if !adapter.ValidateKey(nsKey) {
 					return []string{}
 				}
-				cmds = append(cmds, cl.B().Touch().Key(nsKey).Build().Pin())
+				cmds = append(cmds, cl.B().Expire().Key(nsKey).Seconds(int64(adapter.GetOptions()[storage.OptTTL].(time.Duration).Seconds())).Build().Pin())
 			}
 			retkeys := make([]string, 0)
 			for i, resp := range cl.DoMulti(
@@ -489,6 +509,7 @@ func New(namespace string, host string, ttl time.Duration, clientCaching bool, c
 				hit, err := resp.AsInt64()
 				if err == nil && hit == int64(1) {
 					retkeys = append(retkeys, cmdKey)
+					_ = touchType(cmdKey)
 				}
 			}
 			if adapter.GetChained() != nil {
