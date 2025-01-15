@@ -249,8 +249,9 @@ As normal, fork the library, make your changes and request a pull request back i
 `make test`
 
 Unit tests for the Valkey adapter run against [miniredis](github.com/alicebob/miniredis/v2) which does not offer support
-for client side caching. Thus, this piece of functionality is currently untested, so be aware!  In due course, I'll get 
-the test suite running against a real Valkey server
+for client side caching. Thus, this piece of functionality is currently has no unit test, so be aware!  In due course, I'll get 
+the test suite running against a real Valkey server. I do have it running against a production [Valkey](https://valkey.io/) 
+server that supports client side caching and so far, no problems. It works out of the box. 
 
 ## License
 This software is released under the MIT License. See LICENSE.txt for details.
