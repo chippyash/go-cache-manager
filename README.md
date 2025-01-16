@@ -163,33 +163,7 @@ extending this to Parquet and other formats).  For instance, in my shop, we have
 values (expressed as JSON) into an S3 bucket. The production application uses a Redis cache, behind a memory cache to store 
 that config for fast access. But in the event of cache failure, it looks back to the S3 bucket as its source of truth.
 
-```plantuml
-@startuml
-component "App" as app
-database "Memory Cache" as mem
-database "Redis" as redis
-database "S3" as s3
-app -> mem: get key
-alt "cache hit"
-    mem -> app: result
-else "cache miss"
-    mem -> redis: get key
-    alt "cache hit"
-        redis -> mem: value
-    else "cache miss"
-        redis -> s3: get key
-        alt "cache hit"
-            s3 -> redis: value
-        else "cache miss"
-            s3 -> redis: missed
-            redis -> mem: missed
-            mem - > app: nissed
-        end
-    end
-    mem -> app: value
-end
-@end
-```
+![docs/nested-cache.puml](docs/nested-cache.png)
 
 ### Namespaces
 Each adapter allows you to declare a namespace. This is simply prefixed to any key value that you use. Thus, you can create multiple
