@@ -20,10 +20,14 @@ const (
 	OptS3Bucket = iota + storage.OptDataTypes + 1
 	//OptS3Suffix object key suffix e.g. '.json'
 	OptS3Suffix
-	//OptS3MimeType object mime type e.g. 'application/json'
+	//OptS3MimeType object mime type e.g. 'application/json'. Use MimeTypeJson or MimeTypeText
 	OptS3MimeType
 	//OptS3Region AWS region e.g. 'eu-west-2'
 	OptS3Region
+)
+const (
+	MimeTypeJson = "application/json"
+	MimeTypeText = "text/plain"
 )
 
 func New(bucket string, prefix string, suffix string, mimeType string, region string, expiryDays time.Duration) (storage.Storage, error) {
@@ -46,7 +50,7 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 		storage.TypeString:    true,
 		storage.TypeDuration:  false,
 		storage.TypeTime:      false,
-		storage.TypeBytes:     false,
+		storage.TypeBytes:     true,
 	}
 
 	opts := storage.StorageOptions{
@@ -105,6 +109,11 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 			}
 
 			ret, err := io.ReadAll(out.Body)
+			if *out.ContentEncoding == MimeTypeJson {
+				//return it as []byte
+				return ret, err
+			}
+			//return it as a string
 			return string(ret), err
 		}).
 		SetGetItemsFunc(func(keys []string) (map[string]any, error) {
@@ -139,10 +148,17 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 			nsKey = nsKey + adapter.GetOptions()[OptS3Suffix].(string)
 			bckt := adapter.GetOptions()[OptS3Bucket].(string)
 			mtype := adapter.GetOptions()[OptS3MimeType].(string)
+			//convert value []byte dependent on its actual type
+			var v []byte
+			if t == storage.TypeString {
+				v = []byte(value.(string))
+			} else {
+				v = value.([]byte)
+			}
 			input := &s3.PutObjectInput{
 				Bucket:      &bckt,
 				Key:         &nsKey,
-				Body:        bytes.NewReader([]byte(value.(string))),
+				Body:        bytes.NewReader(v),
 				ContentType: &mtype,
 			}
 			_, err := adapter.Client.(*s3.Client).PutObject(context.TODO(), input)

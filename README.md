@@ -22,6 +22,7 @@ This will never try to be a friend to all. For straightforward caching operation
 
  - Memory
  - Valkey/Redis
+ - S3 Bucket
 
 ## How
 
@@ -135,6 +136,60 @@ For time.Time values to work correctly, we need to know the formatting string to
 options (see 'Setting options' below). You need to set the `valkey.OptDatetimeFormat` to your required format. It is set to
 `time.RFC3339` by default.
 
+### S3 Bucket
+This adapter is provided as a working example of how you can back your cache with an S3 bucket.  S3 provides cheap, but by
+caching standards, slow storage. There are circumstances however that dictate that you want to have primary data stored in
+S3, most usually in JSON or CSV format and use this as a source to feed more performant caches. As such, I wouldn't expect
+this adapter to be the primary adapter, but chained behind another adapter. Hopefully, this adapter will guide you to 
+roll your own file/object backing caches.
+
+It is limited in its functional ability:
+
+ - It is only able to deal with `string` and `[]byte` data types. Any other data type will produce an error.
+ - It's functionality is limited as some methods don't make sense. Only the following methods are supported:
+   - GetItem
+   - GetItems
+   - SetItem
+   - SetItems
+   - HasItem
+   - HasItems
+   - RemoveItem
+   - RemoveItems
+   - Open - No Op
+   - Close - No Op
+
+The most common usage for this type of cache is to store blobs of data, most commonly in JSON or CSV. (NB, I'm looking at 
+extending this to Parquet and other formats).  For instance, in my shop, we have systems producing and updating some configuration
+values (expressed as JSON) into an S3 bucket. The production application uses a Redis cache, behind a memory cache to store 
+that config for fast access. But in the event of cache failure, it looks back to the S3 bucket as its source of truth.
+
+```plantuml
+@startuml
+component "App" as app
+database "Memory Cache" as mem
+database "Redis" as redis
+database "S3" as s3
+app -> mem: get key
+alt "cache hit"
+    mem -> app: result
+else "cache miss"
+    mem -> redis: get key
+    alt "cache hit"
+        redis -> mem: value
+    else "cache miss"
+        redis -> s3: get key
+        alt "cache hit"
+            s3 -> redis: value
+        else "cache miss"
+            s3 -> redis: missed
+            redis -> mem: missed
+            mem - > app: nissed
+        end
+    end
+    mem -> app: value
+end
+@end
+```
 
 ### Namespaces
 Each adapter allows you to declare a namespace. This is simply prefixed to any key value that you use. Thus, you can create multiple
@@ -239,8 +294,56 @@ If you want to add another adapter, you should carefully study the two so far pr
 tests, which as a simple base should mimic what are already done, plus any required by your specific adapter.
 
 This lib is peculiar in that it follows a well trodden path of using an Abstract parent to all adapters and then decorates
-it with the functionality to carry out the interface methods.  Make sure you understand that.
+it with the functionality to carry out the interface methods.  Make sure you understand that. In effect an adapter is just
+a bunch of functions that are set when the adapter is constructed.  This makes it easy for you to:
 
+ - Create an adapter on the fly
+ - Amend an existing adapter to your specific requirements
+#### Create an adapter on the fly
+```go
+import (
+    "github.com/chippyash/go-cache-manager/adapter"
+	"github.com/chippyash/go-cache-manager/storage"
+)
+
+adapter := new(adapter.AbstractAdapter)
+//set the name
+adapter.Name = "myadapter"
+//set the client
+adapter.Client = some.Client
+//create minimal options and add them
+opts := storage.StorageOptions{
+    storage.OptNamespace:      "",
+    storage.OptReadable:       true,
+    storage.OptWritable:       true,
+    storage.OptDataTypes:      storage.DefaultDataTypes,
+}
+adapter.SetOptions(opts)
+//set just the functions you are actually going to use
+adapter.
+	SetGetItemFunc(func(key string) (any, error) { //your code here }).
+    SetSetItemFunc(func(key string, value any) (bool, error) { //your code here })
+//and use your adapter
+a, _ := adapter.GetItem("key")
+ok, _ := adapter.SetItem("anotherkey", "value")
+```
+
+#### Amend an existing adapter
+Let's say, for example, that you don't quite like the way that the Valkey adapter handles a particular method, it doesn't
+quite meet your requirements or that you have found a bug in the method, and you want to temporarily patch it until your pull 
+request is merged.  Construct the adapter as normal, and then overide the offending function:
+
+```go
+import (
+    "github.com/chippyash/go-cache-manager/adapter/valkey"
+)
+
+adapter, _ := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl, false).Open()
+adapter.SetHasItemFunc(func(key string) bool { //your code here })
+//then use the adapter as normal
+```
+
+### Changing this library
 Changes to the existing interface will not be accepted without a long discussion because they may cause a BC break.
 
 Additions to the interface can be accepted, as long as you make the changes to all the currently supported concrete 
