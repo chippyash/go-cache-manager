@@ -3,10 +3,12 @@ package valkey_test
 import (
 	"fmt"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/chippyash/go-cache-manager/adapter"
 	"github.com/chippyash/go-cache-manager/adapter/valkey"
 	"github.com/chippyash/go-cache-manager/errors"
 	"github.com/chippyash/go-cache-manager/storage"
 	"github.com/stretchr/testify/assert"
+	valkey2 "github.com/valkey-io/valkey-go"
 	"maps"
 	"slices"
 	"strconv"
@@ -420,6 +422,15 @@ func TestValkeyAdapter_DecrementInvalidNumber(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, "value is not an integer or out of range", err.Error())
 	assert.Equal(t, int64(0), val)
+}
+
+func TestValkeyAdapter_GetClient(t *testing.T) {
+	rs := miniRedis(t)
+	sut := valkey.New("one:", rs.Addr(), time.Second*60, false, time.Second*0, false)
+	sut, err := sut.Open()
+	assert.NoError(t, err)
+	client := sut.(*adapter.AbstractAdapter).Client.(valkey2.Client)
+	assert.NotNil(t, client)
 }
 
 func miniRedis(t *testing.T) *miniredis.Miniredis {

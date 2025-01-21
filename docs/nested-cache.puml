@@ -1,0 +1,28 @@
+@startuml
+actor "App" as app
+database "Memory Cache" as mem
+database "Redis" as redis
+database "S3" as s3
+app -> mem: get key
+alt "cache hit"
+    mem -> app: result
+else cache miss
+    mem -> redis: get key
+    alt cache hit
+        redis -> mem: value
+        mem -> app: result
+    else cache miss
+        redis -> s3: get key
+        alt cache hit
+            s3 -> redis: value
+            redis -> mem: result
+            mem -> app: value
+        else cache miss
+            s3 -> redis: missed
+            redis -> mem: missed
+            mem -> app: error
+        end
+    end
+
+end
+@enduml
