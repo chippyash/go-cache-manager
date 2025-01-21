@@ -9,10 +9,8 @@ import (
 	adapter2 "github.com/chippyash/go-cache-manager/adapter"
 	"github.com/chippyash/go-cache-manager/errors"
 	"github.com/chippyash/go-cache-manager/storage"
-	"github.com/patrickmn/go-cache"
 	errs "github.com/pkg/errors"
 	"io"
-	"time"
 )
 
 const (
@@ -30,7 +28,7 @@ const (
 	MimeTypeText = "text/plain"
 )
 
-func New(bucket string, prefix string, suffix string, mimeType string, region string, expiryDays time.Duration) (storage.Storage, error) {
+func New(bucket string, prefix string, suffix string, mimeType string, region string) (storage.Storage, error) {
 	//set the options
 	dTypes := storage.DataTypes{
 		storage.TypeUnknown:   false,
@@ -41,7 +39,7 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 		storage.TypeInteger32: false,
 		storage.TypeInteger64: false,
 		storage.TypeUint:      false,
-		storage.TypeUint8:     false,
+		storage.TypeUint8:     true,
 		storage.TypeUint16:    false,
 		storage.TypeUint32:    false,
 		storage.TypeUint64:    false,
@@ -50,7 +48,7 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 		storage.TypeString:    true,
 		storage.TypeDuration:  false,
 		storage.TypeTime:      false,
-		storage.TypeBytes:     true,
+		storage.TypeBytes:     false,
 	}
 
 	opts := storage.StorageOptions{
@@ -58,7 +56,6 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 		storage.OptKeyPattern:     "",
 		storage.OptReadable:       true,
 		storage.OptWritable:       true,
-		storage.OptTTL:            expiryDays,
 		storage.OptMaxKeyLength:   0,
 		storage.OptMaxValueLength: 0,
 		storage.OptDataTypes:      dTypes,
@@ -79,6 +76,10 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 	adapter.Client = s3.NewFromConfig(awsConfig)
 	adapter.SetOptions(opts)
 
+	//isString := func(mimeType string) bool {
+	//	return strings.HasPrefix(mimeType, "text")
+	//}
+
 	//set the functions
 	adapter.
 		SetGetItemFunc(func(key string) (any, error) {
@@ -95,7 +96,7 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 				Bucket: &bckt,
 				Key:    &nsKey,
 			}
-			out, err := adapter.Client.(*s3.Client).GetObject(context.TODO(), input)
+			out, err := adapter.Client.(S3Iface).GetObject(context.TODO(), input)
 			if err != nil {
 				if adapter.GetChained() != nil {
 					val, err := adapter.GetChained().GetItem(key)
@@ -105,15 +106,10 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 					_, e := adapter.SetItem(key, val)
 					return val, e
 				}
-				return nil, errs.Wrap(err, errors.ErrKeyNotFound.Error())
+				return nil, errs.Wrap(errors.ErrKeyNotFound, err.Error())
 			}
 
 			ret, err := io.ReadAll(out.Body)
-			if *out.ContentEncoding == MimeTypeJson {
-				//return it as []byte
-				return ret, err
-			}
-			//return it as a string
 			return string(ret), err
 		}).
 		SetGetItemsFunc(func(keys []string) (map[string]any, error) {
@@ -161,7 +157,7 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 				Body:        bytes.NewReader(v),
 				ContentType: &mtype,
 			}
-			_, err := adapter.Client.(*s3.Client).PutObject(context.TODO(), input)
+			_, err := adapter.Client.(S3Iface).PutObject(context.TODO(), input)
 			if err != nil {
 				return false, errs.Wrap(err, "failed to put object")
 			}
@@ -192,11 +188,21 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 			if !adapter.ValidateKey(nsKey) {
 				return false
 			}
-			_, found := adapter.Client.(*cache.Cache).Get(nsKey)
-			if !found && adapter.GetChained() != nil {
-				return adapter.GetChained().HasItem(key)
+			nsKey = nsKey + adapter.GetOptions()[OptS3Suffix].(string)
+			bckt := adapter.GetOptions()[OptS3Bucket].(string)
+			input := &s3.HeadObjectInput{
+				Bucket: &bckt,
+				Key:    &nsKey,
 			}
-			return found
+			_, err := adapter.Client.(S3Iface).HeadObject(context.TODO(), input)
+			if err != nil {
+				if adapter.GetChained() != nil {
+					return adapter.GetChained().HasItem(key)
+				}
+				return false
+			}
+
+			return true
 		}).
 		SetHasItemsFunc(func(keys []string) map[string]bool {
 			ret := make(map[string]bool)
@@ -227,11 +233,17 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 			if !adapter.ValidateKey(nsKey) {
 				return false
 			}
-			adapter.Client.(*cache.Cache).Delete(nsKey)
+			nsKey = nsKey + adapter.GetOptions()[OptS3Suffix].(string)
+			bckt := adapter.GetOptions()[OptS3Bucket].(string)
+			input := &s3.DeleteObjectInput{
+				Bucket: &bckt,
+				Key:    &nsKey,
+			}
+			out, err := adapter.Client.(S3Iface).DeleteObject(context.TODO(), input)
 			if adapter.GetChained() != nil {
 				return adapter.GetChained().RemoveItem(key)
 			}
-			return true
+			return *out.DeleteMarker && err == nil
 		}).
 		SetRemoveItemsFunc(func(keys []string) []string {
 			for _, key := range keys {
@@ -253,4 +265,13 @@ func New(bucket string, prefix string, suffix string, mimeType string, region st
 		})
 
 	return adapter, nil
+}
+
+// S3Iface provides an interface to AWS SDK V2 s3 client. We require this for mocking the client in tests
+type S3Iface interface {
+	DeleteObject(ctx context.Context, params *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
+	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 }

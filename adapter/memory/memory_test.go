@@ -290,3 +290,9 @@ func TestMemoryAdapter_DecrementInvalidNumber(t *testing.T) {
 	assert.Equal(t, "The value for foo is not an integer", err.Error())
 	assert.Equal(t, int64(0), val)
 }
+
+func TestMemoryAdapter_GetClient(t *testing.T) {
+	sut := memory.New("", time.Second*60, time.Second*120)
+	client := sut.(*adapter.AbstractAdapter).Client.(*cache.Cache)
+	assert.IsType(t, cache.Cache{}, client)
+}

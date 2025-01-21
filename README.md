@@ -1,5 +1,5 @@
 # Multi Adapter Cache Manager
-## github.com/chippash/go-cache-manager
+## github.com/chippyash/go-cache-manager
 
 ## What
 
@@ -143,9 +143,24 @@ S3, most usually in JSON or CSV format and use this as a source to feed more per
 this adapter to be the primary adapter, but chained behind another adapter. Hopefully, this adapter will guide you to 
 roll your own file/object backing caches.
 
+```go
+import "github.com/chippyash/go-cache-manager/adapter/bucket"
+import "github.com/aws/aws-sdk-go-v2/service/s3"
+
+bucket := "my-cache-bucket"
+prefix := "some/folder/"
+suffix := ".json"
+mimeType := bucket.MimeTypeJson
+region := "eu-west-2"
+cacheManager, err := bucket.New(bucket, prefix, suffix, mimeType, region)
+if err != nil {
+	panic(err)
+}
+```
+
 It is limited in its functional ability:
 
- - It is only able to deal with `string` and `[]byte` data types. Any other data type will produce an error.
+ - It is only able to deal with `string` and `[]byte` input data types. Any other data type will produce an error.
  - It's functionality is limited as some methods don't make sense. Only the following methods are supported:
    - GetItem
    - GetItems
@@ -157,6 +172,21 @@ It is limited in its functional ability:
    - RemoveItems
    - Open - No Op
    - Close - No Op
+ - The Getter methods always return a string value
+
+The `mimeType` parameter for the constructor is used by s3 to indicate the object type, so that it is properly parsed by other
+S3 operations.
+
+To unmarshal the value use something like:
+
+```go
+val, err := cacheManager.GetItem("key")
+if err != nil {
+	panic(err)
+}
+var obj MyObject
+err := json.Unmarshal([]byte(val.(string)), &obj)
+```
 
 The most common usage for this type of cache is to store blobs of data, most commonly in JSON or CSV. (NB, I'm looking at 
 extending this to Parquet and other formats).  For instance, in my shop, we have systems producing and updating some configuration
@@ -164,6 +194,12 @@ values (expressed as JSON) into an S3 bucket. The production application uses a 
 that config for fast access. But in the event of cache failure, it looks back to the S3 bucket as its source of truth.
 
 ![docs/nested-cache.puml](docs/nested-cache.png)
+
+The underlying client for this adapter is the [AWS Go SDK V2 S3 Client]("github.com/aws/aws-sdk-go-v2/service/s3"). You 
+are encouraged to RTFM on S3. Most problems using this adapter will be because you did not RTFM!
+
+Authentication for the client uses the environment method based on environment variables etc.  See [AWS Config](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/config)
+for additional information.  If you need support for other methods, please consider a Pull Request.
 
 ### Namespaces
 Each adapter allows you to declare a namespace. This is simply prefixed to any key value that you use. Thus, you can create multiple
@@ -246,30 +282,42 @@ and act upon your cache backend more directly.
 
 #### Memory Cache Client
 ```go
+import "github.com/chippyash/go-cache-manager/adapter"
 import "github.com/chippyash/go-cache-manager/adapter/memory"
 import "github.com/patrickmn/go-cache"
 
 cacheManager := memory.New(ns, ttl, purgeTtl)
-client := cacheManager.Client.(*cache.Cache)
+client := cacheManager.(*adapter.AbstractAdapter).Client.(*cache.Cache)
 ```
 
 #### Valkey Cache Client
 ```go
+import "github.com/chippyash/go-cache-manager/adapter"
 import vk "github.com/chippyash/go-cache-manager/adapter/valkey"
 import "github.com/valkey-io/valkey-go"
 
 cacheManager, err := vk.New(ns, host, ttl, clientCaching, clientCachingTtl, false).Open()
-client := cacheManager.Client.(valkey.Client)
+client := cacheManager.(*adapter.AbstractAdapter).Client.(valkey.Client)
+```
+
+#### S3 Bucket Client
+```go
+import "github.com/chippyash/go-cache-manager/adapter"
+import "github.com/chippyash/go-cache-manager/adapter/bucket"
+import "github.com/aws/aws-sdk-go-v2/service/s3"
+
+cacheManager, err := bucket.New(bucket, prefix, suffix, mimeType, region)
+client := cacheManager.(*adapter.AbstractAdapter).Client.(*s3.Client)
 ```
 
 ## For Development
 
-If you want to add another adapter, you should carefully study the two so far provided.  Write your code, including the unit
+If you want to add another adapter, you should carefully study the three so far provided.  Write your code, including the unit
 tests, which as a simple base should mimic what are already done, plus any required by your specific adapter.
 
-This lib is peculiar in that it follows a well trodden path of using an Abstract parent to all adapters and then decorates
-it with the functionality to carry out the interface methods.  Make sure you understand that. In effect an adapter is just
-a bunch of functions that are set when the adapter is constructed.  This makes it easy for you to:
+This lib is peculiar in that it follows a well trodden path, in the PHP world,  of using an Abstract parent to all adapters 
+and then decorating the concrete objects with the functionality to carry out the interface methods.  Make sure you understand that. In effect 
+an adapter is just a bunch of functions that are set when the adapter is constructed.  This makes it easy for you to:
 
  - Create an adapter on the fly
  - Amend an existing adapter to your specific requirements
@@ -277,7 +325,7 @@ a bunch of functions that are set when the adapter is constructed.  This makes i
 ```go
 import (
     "github.com/chippyash/go-cache-manager/adapter"
-	"github.com/chippyash/go-cache-manager/storage"
+    "github.com/chippyash/go-cache-manager/storage"
 )
 
 adapter := new(adapter.AbstractAdapter)
@@ -295,7 +343,7 @@ opts := storage.StorageOptions{
 adapter.SetOptions(opts)
 //set just the functions you are actually going to use
 adapter.
-	SetGetItemFunc(func(key string) (any, error) { //your code here }).
+    SetGetItemFunc(func(key string) (any, error) { //your code here }).
     SetSetItemFunc(func(key string, value any) (bool, error) { //your code here })
 //and use your adapter
 a, _ := adapter.GetItem("key")
@@ -305,15 +353,16 @@ ok, _ := adapter.SetItem("anotherkey", "value")
 #### Amend an existing adapter
 Let's say, for example, that you don't quite like the way that the Valkey adapter handles a particular method, it doesn't
 quite meet your requirements or that you have found a bug in the method, and you want to temporarily patch it until your pull 
-request is merged.  Construct the adapter as normal, and then overide the offending function:
+request is merged.  Construct the adapter as normal, and then override the offending function:
 
 ```go
 import (
+    "github.com/chippyash/go-cache-manager/adapter"
     "github.com/chippyash/go-cache-manager/adapter/valkey"
 )
 
 adapter, _ := valkey.New(ns, host, ttl, clientCaching, clientCachingTtl, false).Open()
-adapter.SetHasItemFunc(func(key string) bool { //your code here })
+adapter.(adapter.AbstractAdapter).SetHasItemFunc(func(key string) bool { //your code here })
 //then use the adapter as normal
 ```
 
@@ -322,6 +371,10 @@ Changes to the existing interface will not be accepted without a long discussion
 
 Additions to the interface can be accepted, as long as you make the changes to all the currently supported concrete 
 implementations.
+
+Updates to the documentation i.e. this README.md, are most welcome. I speak in UK English. That may not always make sense 
+to our friends around the world, so if you have better ways of phrasing or want to provide another language README, then
+please contact me, directly or via an issue in this repo.
 
 As normal, fork the library, make your changes and request a pull request back into this repo. Put your changes on a branch.
 
@@ -333,6 +386,9 @@ for client side caching. Thus, this piece of functionality is currently has no u
 the test suite running against a real Valkey server. I do have it running against a production [Valkey](https://valkey.io/) 
 server that supports client side caching and so far, no problems. It works out of the box. 
 
+Unit tests for the S3 bucket run against a mock S3 client, so use with caution. As above, once I get this lib running against
+a real S3 bucket via a third party test runner, you'll have more confidence.
+
 ## License
 This software is released under the MIT License. See LICENSE.txt for details.
 
@@ -343,4 +399,4 @@ to update the file.
  - Thanks to the original Zend team that came up with Zend/Cache, some of whom I know, but they shall be nameless. They
 gave many hours of sport back in the day!
  - Thanks to [@rueian](https://github.com/rueian) for his very fast support on Valkey. He is a main contributor to Valkey.
-Thanks to him this lib took 2.5 days to write instead of 2.5 weeks.
+Thanks to him the initial build of this lib (memory, valkey) took 2.5 days to write instead of 2.5 weeks.
