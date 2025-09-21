@@ -108,6 +108,7 @@ if err != nil {
 someValue = uint32(u64)
 ```
 
+
 As this can get tiresome if you have to do a lot of conversion, you can switch on data management by setting the 'manageTypes'
 parameter for valkey.New() (the last parameter) to true.  When getting cache items, they will be returned as the same type 
 in which they were set.
